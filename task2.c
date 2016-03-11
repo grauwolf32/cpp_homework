@@ -27,6 +27,16 @@ typedef struct {
 }stack;
 
 
+typedef enum {none = 0,plus,minus,divide,multiplex} operation;
+
+typedef struct node{
+	struct node *pleft;
+	struct node *pright;
+	struct node *parent;
+	buffer *expr;
+	operation op;
+}node;
+
 void add(vlong *op1, vlong *op2, vlong *res);
 void mul(vlong *op1, int sh,int offs, vlong *res);
 void mul_long(vlong *op1, vlong *op2, vlong *res);
@@ -47,7 +57,15 @@ int  add_to_buff(buffer* r, char* s);
 void init_buff(buffer* r,size_t n);
 void delete_buff(buffer* r);
 
+int in_str(char c,char* str);
+
 int assert_expr(buffer* r);
+int build_lex_tree(buffer* r);
+
+void init_stack(stack* s);
+void push(stack *s,int x);
+int pop(stack *s);
+
 
 
 int make_tests();
@@ -66,12 +84,39 @@ int main(void)
 	return 0;
 }
 
+/* ------------------------------------------------------------------------------------------ */
+/* -------------------------------------------Parser----------------------------------------- */
+
+int build_tree(buffer* r)
+{
+	int  op_priority[] = {0,0,0,1,1};
+	char* op  = "~+-*/";
+	operation maxop;
+
+	stack s;
+	init_stack(&s);
+
+	int maxop_ptr = 0;
+	int level = 0;
+	
+	int i = 0;
+	/* The goal is to find max priority term on current level */
+	for(i = 0; i < r->pos;i++)
+	{
+		continue;
+	}
+	return 0;	
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* ---------------------------------------Long Arithmetics---------------------------------- */
+
 void print_vlong(vlong *c)
 {
 	int i;
-	printf(" %d ",c->val[c->st]);
+	printf("%d",c->val[c->st]);
 	for(i = c->st + 1; i <= MAXLEN;i++)
-		printf("% .4d ",c->val[i]);
+		printf("%.4d",c->val[i]);
 }
 
 int read_vlong(vlong *c)
@@ -400,9 +445,12 @@ int in_str(char c,char* str)
 	size_t length = strlen(str);
 	int i = 0;
 	while(i < length)
-		if(str[i++] == c)return 1;
+	{
+		if(str[i] == c)return i;
+		i += 1;
+	}
 
-	return 0;
+	return -1;
 }
 
 int assert_expr(buffer* r)
@@ -414,7 +462,7 @@ int assert_expr(buffer* r)
 	int i = 0;
 	for(i = 0;i < r->pos;i++)
 	{
-		if(in_str(r->buf[i], allowed_symbols))
+		if(in_str(r->buf[i], allowed_symbols) != -1)
 		{
 			if(r->buf[i] == '('){push(&s,1);continue;}
 			if(r->buf[i] == ')'){
@@ -685,21 +733,10 @@ int make_tests()
 // 12312312 + -1212121212122121
 
 /*
-
-
-enum operation{plus=0,minus,divide,multiplex,bracket};
 int  op_priority = {0,0,1,1,1};
 char op_char[] = "+-/*()";
 
 char 
-
-
-
-typedef struct leaf_{
-	leaf *pleft;
-	leaf *pright;
-	operation op;
-}leaf;
 
 leaf* tree_head = (leaf*)malloc(sizeof(leaf));
 tree_head->op = bracket;
