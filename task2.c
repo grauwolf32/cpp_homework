@@ -21,6 +21,12 @@ typedef struct {
 	size_t  pos;
 }buffer;
 
+typedef struct {
+	int val[MAXLEN];
+	int sp;
+}stack;
+
+
 void add(vlong *op1, vlong *op2, vlong *res);
 void mul(vlong *op1, int sh,int offs, vlong *res);
 void mul_long(vlong *op1, vlong *op2, vlong *res);
@@ -41,6 +47,8 @@ int  add_to_buff(buffer* r, char* s);
 void init_buff(buffer* r,size_t n);
 void delete_buff(buffer* r);
 
+int assert_expr(buffer* r);
+
 
 int make_tests();
 int equ_vlong_test();
@@ -49,6 +57,8 @@ int sub_vlong_test();
 int mul_vlong_test();
 int div_vlong_test();
 
+int buff_test();
+int expr_test();
 
 int main(void)
 {
@@ -316,11 +326,14 @@ void div_long(vlong *op1,int sh, vlong *res)
 void resize_buff(buffer* r,size_t n)
 {
 	r->buf = (char*)realloc(r->buf,n*sizeof(char));
+	memset((r->buf+r->pos),'\0',n - r->pos);
+	r->pos = r->pos > n ? n : r->pos; /*TODO Make sure about this expr*/
 	r->size = n;
 }
 void init_buff(buffer* r,size_t n)
 {
 	r->buf = (char*)malloc(n*sizeof(char));
+	memset(r->buf,'\0',n*sizeof(char));
 	r->size = n;
 	r->pos = 0;
 }
@@ -332,6 +345,13 @@ void delete_buff(buffer* r)
 	r->size = 0;
 	r->pos  = 0;
 }
+void clear_buff(buffer* r)
+{
+	memset(r->buf,'\0',sizeof(char)*r->size);
+	r->size = 0;
+	r->pos  = 0;
+}
+
 int add_to_buff(buffer* r, char* s)
 {
 	size_t len = strlen(s); 
@@ -341,6 +361,9 @@ int add_to_buff(buffer* r, char* s)
 
 	for(i = 0;i < len;i++)
 	{	
+		if(r->pos >= r->size - 1)
+			resize_buff(r,2*r->size);
+
 		if(s[i] != ' ' && s[i] != '\n')
 		{
 			r->buf[r->pos++] = s[i];
@@ -349,6 +372,64 @@ int add_to_buff(buffer* r, char* s)
 		else continue;
 	}
 	return count;	
+}
+/* ------------------------------------------------------------------------------------------ */
+/* ------------------------------------------Stack------------------------------------------- */
+
+void push(stack *s,int x)
+{
+	s->val[s->sp++] = x;
+}
+
+int pop(stack *s)
+{
+	return s->val[--s->sp];
+}
+
+void init_stack(stack* s)
+{
+	memset(s->val,0,sizeof(int)*MAXLEN);
+	s->sp = 0;
+}
+
+
+/* ------------------------------------------------------------------------------------------ */
+/* -------------------------------------Check expressions------------------------------------ */
+int in_str(char c,char* str)
+{
+	size_t length = strlen(str);
+	int i = 0;
+	while(i < length)
+		if(str[i++] == c)return 1;
+
+	return 0;
+}
+
+int assert_expr(buffer* r)
+{
+	char* allowed_symbols = "1234567890*-+/()";
+	stack s;
+	init_stack(&s);
+
+	int i = 0;
+	for(i = 0;i < r->pos;i++)
+	{
+		if(in_str(r->buf[i], allowed_symbols))
+		{
+			if(r->buf[i] == '('){push(&s,1);continue;}
+			if(r->buf[i] == ')'){
+				if(s.sp > 0){
+					pop(&s);	
+				}
+				else return -1;
+			}
+			
+		}
+		else return -1;
+	}
+	if(s.sp != 0) return -1;
+
+	return 0;
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -544,6 +625,51 @@ int div_vlong_test()
 	return 0;
 }
 
+int buff_test()
+{
+	size_t test_num = 0;
+	char* test = "      123456         + \n \n 11111111 \n-\n193/ 2\n";
+	char* res  = "123456+11111111-193/2";
+
+	log("Test %zu",test_num++);
+		buffer r;
+		init_buff(&r,2);
+        	add_to_buff(&r, test);
+	if(strcmp(r.buf,res) != 0)printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+
+	delete_buff(&r);
+}
+
+int expr_test()
+{
+	size_t test_num = 0;
+	char* bad_expr_1 = " (1 +232482739482)*)12312";
+	char* bad_expr_2 = " (1 +232482739482)*123adajsd12";
+	char* good_expr_1  = "(101231 + 1231 213) + 21312\n1231";
+
+	buffer r;
+	init_buff(&r,64);
+
+	log("Test %zu",test_num++);
+		add_to_buff(&r,bad_expr_1);
+	if(assert_expr(&r) == 0)printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+	
+	clear_buff(&r);
+	log("Test %zu",test_num++);
+		add_to_buff(&r,bad_expr_2);
+	if(assert_expr(&r) == 0)printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+
+	clear_buff(&r);
+	log("Test %zu",test_num++);
+		add_to_buff(&r,good_expr_1);
+	if(assert_expr(&r) == -1)printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+	delete_buff(&r);
+}
+
 int make_tests()
 {
 	equ_vlong_test();
@@ -551,38 +677,19 @@ int make_tests()
 	sub_vlong_test();
 	mul_vlong_test();
 	div_vlong_test();
+	buff_test();
+	expr_test();
 	return 0;	
 }
 /* ------------------------------------------------------------------------------------------ */
+// 12312312 + -1212121212122121
 
 /*
-int if_in(char c,char* str)
-{
-	size_t length = strlen(str);
-	int i = 0;
-	while(i < length)
-		if(str[i++] == c)return 1;
-	return 0;
-}
+
 
 enum operation{plus=0,minus,divide,multiplex,bracket};
 int  op_priority = {0,0,1,1,1};
 char op_char[] = "+-/*()";
-
-typedef struct {
-	int val[MAXLEN];
-	int sp;
-}stack;
-
-void push(stack *s,int x)
-{
-	s->val[s->sp++] = x;
-}
-
-int pop(stack *s)
-{
-	return s->val[--s->sp];
-}
 
 char 
 
