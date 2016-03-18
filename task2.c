@@ -4,8 +4,11 @@
 #include <math.h>
 
 #define MAXLEN 1000
+#define MAXPRIORITY 10
 #define SYS 10000
 #define LOGSYS 4
+#define BUFFLEN 128
+#define MINLEVEL 128
 
 #define log(s, ...) printf(s " (%s in %s:%d)", __VA_ARGS__, __func__, \
     __FILE__, __LINE__)
@@ -40,8 +43,11 @@ typedef struct node{
 void add(vlong *op1, vlong *op2, vlong *res);
 void mul(vlong *op1, int sh,int offs, vlong *res);
 void mul_long(vlong *op1, vlong *op2, vlong *res);
-void div_long(vlong *op1,int sh, vlong *res);
+void div_short(vlong *op1,int sh, vlong *res);
 
+vlong ltovlong(long long a);
+
+int  cpy(vlong* src,vlong* ind);
 int  geq(vlong* op1,vlong* op2);
 int  leq(vlong* op1,vlong* op2);
 int  les(vlong* op1,vlong* op2);
@@ -52,6 +58,7 @@ void print_vlong(vlong *c);
 int reads_vlong(vlong *c, char* str);
 int  read_vlong(vlong *c);
 
+void copy_buff(buffer* source,buffer* target,int st,int end);
 void resize_buff(buffer* r,size_t n);
 int  add_to_buff(buffer* r, char* s);
 void init_buff(buffer* r,size_t n);
@@ -66,6 +73,11 @@ void init_stack(stack* s);
 void push(stack *s,int x);
 int pop(stack *s);
 
+node* new_node(node* parent);
+int  delete_node(node* r);
+int delete_tree(node* parent);
+int eval_tree(node* parent,vlong* res);
+void print_tree(node* parent,int level);
 
 
 int make_tests();
@@ -74,38 +86,115 @@ int add_vlong_test();
 int sub_vlong_test();
 int mul_vlong_test();
 int div_vlong_test();
+int build_tree_test();
 
 int buff_test();
 int expr_test();
 
+
 int main(void)
 {
 	make_tests();
+	//build_tree_test();
 	return 0;
 }
 
 /* ------------------------------------------------------------------------------------------ */
 /* -------------------------------------------Parser----------------------------------------- */
 
-int build_tree(buffer* r)
+int build_tree(buffer* r,node* parent)
 {
 	int  op_priority[] = {0,0,0,1,1};
 	char* op  = "~+-*/";
-	operation maxop;
+	operation mnop;
 
-	stack s;
-	init_stack(&s);
+	int s = 0;
 
-	int maxop_ptr = 0;
+	int mnop_ptr = 0;
 	int level = 0;
 	
 	int i = 0;
-	/* The goal is to find max priority term on current level */
+	int temp = 0;
+
+	int maxlevel = 0;
+	int minlevel = MINLEVEL;
+
+	/* The goal is to find min priority term on current level and put is as node of the tree */
 	for(i = 0; i < r->pos;i++)
 	{
-		continue;
+		if(r->buf[i] == '(') s += 1;
+		if(r->buf[i] == ')') s -= 1;
+		
+		//printf("s: %d\n",s);
+
+		if(maxlevel < s) maxlevel = s;
+		if(minlevel > s) minlevel = s;
 	}
-	return 0;	
+	printf("expr: %s\n",r->buf);
+	printf("minlevel: %d\n",minlevel);
+	printf("maxlevel: %d\n",maxlevel);
+
+	level = minlevel;
+	
+	/*TODO Initialize variable that are reused by the cycle*/
+	mnop = none;
+	mnop_ptr = 0;
+	temp = 0;
+	s = 0; /*Clear the stack TODO Use counter instead of stack*/
+
+	/* Find the maxlevel of brackets*/
+	for(i = 0; i < r->pos;i++)
+	{
+		if(r->buf[i] == '('){s += 1;continue;}
+		if(r->buf[i] == ')'){s -= 1;continue;}
+	
+		if(level == s){
+			temp = in_str(r->buf[i],op);
+			if(temp > 0)
+			{
+				if(op_priority[temp] <= op_priority[mnop])
+				{
+					mnop = (operation)temp;
+					mnop_ptr = i;
+				}
+			}
+		}
+			
+	}
+	
+	if(mnop_ptr == 0)
+	{
+		return 0;
+	}
+		
+	parent->op = mnop;
+	parent->expr = r;
+	parent->pleft = new_node(parent);
+	parent->pright = new_node(parent);
+	
+	copy_buff(parent->expr,parent->pleft->expr,0,mnop_ptr-1);
+	copy_buff(parent->expr,parent->pright->expr,mnop_ptr+1,parent->expr->pos);
+
+	build_tree(parent->pleft->expr,parent->pleft);
+	build_tree(parent->pright->expr,parent->pright);
+	return 0;
+	
+}
+void print_tree(node* parent,int level)
+{
+	printf("level: %d\n",level);
+	printf("operation: %d\n",(int)parent->op);
+	printf("buff: %s\n\n",parent->expr->buf);
+	if(parent->pleft != NULL)  {print_tree(parent->pleft,level+1);}
+	if(parent->pright != NULL) {print_tree(parent->pleft,level+1);}
+
+	return;
+}
+
+int eval_tree(node* parent,vlong* res)
+{
+	
+	return 0;
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -119,53 +208,54 @@ void print_vlong(vlong *c)
 		printf("%.4d",c->val[i]);
 }
 
+int  cpy(vlong* src,vlong* ind)
+{
+	int i = 0;
+	int st  = src->st;
+	ind->st = src->st;
+	for(i = MAXLEN;i >= st;i--)
+		ind->val[i] = src->val[i];
+
+	return 0;
+}
+
+vlong ltovlong(long long a)
+{
+	vlong n;
+	n.val[MAXLEN] = 0;
+	n.st = MAXLEN;
+
+	while(a != 0)
+	{
+		n.val[n.st] = a % SYS;
+		a = a / SYS;
+		n.st = n.st - 1;
+	}
+	n.st += 1;
+
+	return n;
+}
+
 int read_vlong(vlong *c)
 {
-	int   st = MAXLEN, temp;
-	char  str[MAXLEN + 1];
-	char  r_val[LOGSYS+1];
-	char* str_pos;
-	char  tmp = '\0';
-
+	char str[MAXLEN];
 	scanf("%s",str);
-	size_t length   = strlen(str);
-	size_t sections = (size_t)(length/LOGSYS);
-	size_t rest  = length % LOGSYS;
-
-	int i = sections-1;
-
-	while(i >= 0){
-		str_pos = (char*)(str + i*LOGSYS +rest);
-		if(sscanf(str_pos,"%4d",&temp) != 1){printf("[error]");return -1;} /*If LOGSYS changing, don't forget to change %4d */
-		c->val[st--] = temp;
-		i--;
-	}
-
-	if(rest)
-	{
-		strncpy(r_val,str,rest);
-		r_val[rest] = '\0';
-
-		sscanf(r_val,"%d",&temp);
-		c->val[st--] = temp;
-	}
-
-	c->st = st + 1;
-
-	if(c->val[c->st] < 0)
-	{
-		for(i = c->st + 1;i <= MAXLEN;i++)
-			c->val[i] *= -1;
-	}
-	return 0;
+	return reads_vlong(c,str);
 }
 
 int reads_vlong(vlong *c, char* str)
 {
 	int   st = MAXLEN, temp;
+	int   is_negative = 0;
 	char  r_val[LOGSYS+1];
 	char* str_pos;
 	char  tmp = '\0';
+
+	if(str[0] == '-')
+	{
+		is_negative = 1;
+		str = str + 1;
+	}
 
 	size_t length   = strlen(str);
 	size_t sections = (size_t)(length/LOGSYS);
@@ -179,6 +269,7 @@ int reads_vlong(vlong *c, char* str)
 		c->val[st--] = temp;
 		i--;
 	}
+	
 
 	if(rest)
 	{
@@ -191,9 +282,9 @@ int reads_vlong(vlong *c, char* str)
 
 	c->st = st + 1;
 
-	if(c->val[c->st] < 0)
+	if(is_negative)
 	{
-		for(i = c->st + 1;i <= MAXLEN;i++)
+		for(i = c->st;i <= MAXLEN;i++)
 			c->val[i] *= -1;
 	}
 	return 0;
@@ -226,6 +317,7 @@ void add(vlong *op1, vlong *op2, vlong *res)
 	while(res->val[res->st] == 0 && res->st < MAXLEN)
 		res->st += 1;
 }
+
 
 void mul(vlong *op1, int sh,int offs, vlong *res)
 {
@@ -335,39 +427,42 @@ int  grt(vlong* op1,vlong* op2)
 
 /* TODO Make the shit below works well */
 
-void div_long(vlong *op1,int sh, vlong *res)
+void div_short(vlong *op1,int sh, vlong *res)
 {
-	int i, flag = 0;
-	int j = MAXLEN;
+	int i = MAXLEN;
 	int st = op1->st;
+	int rem = 0;
+	long long a = 0;
 	long long temp = 0;
+	long long flag = 0;
+
+	vlong res_tmp,a_long;
+	res_tmp.val[MAXLEN] = 0;
+	res_tmp.st = 0;
+
+	res->val[MAXLEN] = 0;
+	res->st = MAXLEN;
 
 	for(i=st; i <= MAXLEN;i++)
-		res->val[i] = 0;
-
-	for(i=MAXLEN; i >= st;i--)
 	{
-		if(op1->val[i] + flag < sh)
-		{
-			temp = op1->val[i]*SYS + op1->val[i-1] + flag;
-			res->val[j] = temp / sh;
-			flag = (temp % sh)*SYS;
-			i--;
-			j--;
-		}
-		
+		cpy(res,&res_tmp);
+		mul(&res_tmp,SYS,0,res);
+
 		temp = op1->val[i] + flag;
-		res->val[j] = (int)(temp / sh);
-		flag = (temp % sh)*SYS;
-		j--;
+		a   = (long long) temp / sh; // Here is the heck!
+		rem = (long long) temp % sh;
+
+		a_long = ltovlong(a);
+		add(res,&a_long,res);
+
+		flag = rem * SYS;
 	}
-	res->st = j + 1;
 }
 
 
 /* ------------------------------------------------------------------------------------------ */
 
-/*-----------Here we build function to eleminate all spaces and '\n's in the text-------------*/
+/*------------------------------------------Buffer--------------------------------------------*/
 void resize_buff(buffer* r,size_t n)
 {
 	r->buf = (char*)realloc(r->buf,n*sizeof(char));
@@ -378,7 +473,7 @@ void resize_buff(buffer* r,size_t n)
 void init_buff(buffer* r,size_t n)
 {
 	r->buf = (char*)malloc(n*sizeof(char));
-	memset(r->buf,'\0',n*sizeof(char));
+	memset(r->buf,'\0',n);
 	r->size = n;
 	r->pos = 0;
 }
@@ -393,7 +488,6 @@ void delete_buff(buffer* r)
 void clear_buff(buffer* r)
 {
 	memset(r->buf,'\0',sizeof(char)*r->size);
-	r->size = 0;
 	r->pos  = 0;
 }
 
@@ -418,6 +512,24 @@ int add_to_buff(buffer* r, char* s)
 	}
 	return count;	
 }
+
+void copy_buff(buffer* source,buffer* target,int st,int end)
+{
+	int size = end - st;
+	int i = 0;
+
+	if(size < 0 || size > source->pos+1)return;
+	clear_buff(target);
+
+	if(target->size < size)
+		resize_buff(target,size+1);
+
+	for(i = 0;i <= size;i++) /*Less or Leq*/
+		target->buf[i] = source->buf[st+i];
+	
+	target->pos = size;
+}
+
 /* ------------------------------------------------------------------------------------------ */
 /* ------------------------------------------Stack------------------------------------------- */
 
@@ -435,6 +547,61 @@ void init_stack(stack* s)
 {
 	memset(s->val,0,sizeof(int)*MAXLEN);
 	s->sp = 0;
+}
+/* ------------------------------------------------------------------------------------------ */
+/* ------------------------------------------Node-------------------------------------------- */
+
+node* new_node(node* parent)
+{
+	node* r = (node*)malloc(sizeof(node));
+	r->expr = (buffer*)malloc(sizeof(buffer));
+
+	r->pleft = NULL;
+	r->pright = NULL;
+	r->parent = parent;
+	r->op = none;
+	init_buff(r->expr,BUFFLEN);
+	
+	return r;
+}
+
+int  delete_node(node* r)
+{
+	int status = 0;
+	if(r == NULL) return status;	
+
+	if(r->pright != NULL) status += 1;
+	if(r->pleft != NULL) status += 2;
+
+	if(r->expr != NULL){
+		delete_buff(r->expr);
+		free(r->expr);
+		r->expr = NULL;
+	}
+
+	if(r->parent != NULL) {
+		if(r == r->parent->pleft)
+			r->parent->pleft = (node*)NULL;
+		else if(r == r->parent->pright)
+			r->parent->pright = NULL;
+		else status += 4;
+	}    
+	free(r);
+	r = NULL;
+
+	return status;	
+}
+
+int delete_tree(node* parent)
+{
+	int status = 0;
+	if(parent->pleft != NULL)
+		status += delete_tree(parent->pleft);
+	if(parent->pright != NULL)
+		status += delete_tree(parent->pright);
+
+	status += delete_node(parent);
+	return status;
 }
 
 
@@ -599,6 +766,7 @@ int sub_vlong_test()
 
 	return 0;
 }
+
 int mul_vlong_test()
 {
 	vlong a,b,c,e;
@@ -644,7 +812,7 @@ int mul_vlong_test()
 
 	return 0;
 }
-int div_vlong_test()
+int div_short_test()
 {
 	vlong a,b,c,e;
 	size_t test_num = 0;
@@ -652,23 +820,63 @@ int div_vlong_test()
 	log("Test %zu",test_num++);
 		reads_vlong(&a,"1");
 		reads_vlong(&e,"1");
-		div_long(&a,1,&c);
+		div_short(&a,1,&c);
 	if(!equ(&e,&c))printf("...FAIL\n");
 	else printf("...SUCCESS\n");
 
 	log("Test %zu",test_num++);
 		reads_vlong(&a,"111");
 		reads_vlong(&e,"37");
-		div_long(&a,3,&c);
+		div_short(&a,3,&c);
 	if(!equ(&e,&c))printf("...FAIL\n");
 	else printf("...SUCCESS\n");
 
 	log("Test %zu",test_num++);
 		reads_vlong(&a,"111111111");
 		reads_vlong(&e,"3003003");
-		div_long(&a,37,&c);
+		div_short(&a,37,&c);
 	if(!equ(&e,&c))printf("...FAIL\n");
 	else printf("...SUCCESS\n");
+
+	log("Test %zu",test_num++);
+		reads_vlong(&a,"111111111");
+		reads_vlong(&e,"-3003003");
+		div_short(&a,-37,&c);
+	if(!equ(&e,&c))printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+	
+	return 0;
+}
+void ltovlong_test()
+{
+	vlong a,b,c,e;
+	long long   r;
+	size_t test_num = 0;
+	log("Test %zu",test_num++);
+		reads_vlong(&a,"999999999999");
+		b = ltovlong(999999999999);
+	if(!equ(&a,&b))printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+
+	log("Test %zu",test_num++);
+		reads_vlong(&a,"-99999999");
+		b = ltovlong(-99999999);
+	if(!equ(&a,&b))printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+}
+
+int cpy_vlong_test()
+{
+	vlong a,b,c,e;
+	size_t test_num = 0;
+
+	log("Test %zu",test_num++);
+		reads_vlong(&a,"1234567890098765457635428635");
+		reads_vlong(&b,"13124234535625452435234525245234523542");
+		cpy(&a,&b);
+	if(!equ(&a,&b))printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+
 	
 	return 0;
 }
@@ -688,6 +896,36 @@ int buff_test()
 
 	delete_buff(&r);
 }
+
+int copy_buff_test()
+{
+	size_t test_num = 0;
+	buffer *b1,*b2;
+
+	b1 = (buffer*)malloc(sizeof(buffer));
+	b2 = (buffer*)malloc(sizeof(buffer));
+
+	init_buff(b1,2);
+	init_buff(b2,2);
+
+	log("Test %zu",test_num++);
+		add_to_buff(b1,"(1+3)*2+1");
+		copy_buff(b1,b2,0,7-1);	
+	if(strcmp(b2->buf,"(1+3)*2") != 0)printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+
+	clear_buff(b1);
+	log("Test %zu",test_num++);
+		add_to_buff(b1,"(1+3)*2+1");
+		copy_buff(b1,b2,8,9);	
+	if(strcmp(b2->buf,"1") != 0)printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+	
+	free(b1);
+	free(b2);
+}
+
+
 
 int expr_test()
 {
@@ -718,35 +956,33 @@ int expr_test()
 	delete_buff(&r);
 }
 
+int build_tree_test()
+{
+	char *expr = "(1+3)*2 + 1";
+	node* parent = new_node(NULL);
+
+	add_to_buff(parent->expr,expr);
+	printf("Is valid: %d\n",assert_expr(parent->expr));
+
+	build_tree(parent->expr,parent);
+	print_tree(parent,0);
+	delete_tree(parent);
+	return 0;
+}
+
 int make_tests()
 {
 	equ_vlong_test();
 	add_vlong_test();
 	sub_vlong_test();
 	mul_vlong_test();
-	div_vlong_test();
+	div_short_test();
+	ltovlong_test();
+	cpy_vlong_test();
 	buff_test();
 	expr_test();
+	copy_buff_test();
 	return 0;	
 }
 /* ------------------------------------------------------------------------------------------ */
-// 12312312 + -1212121212122121
-
-/*
-int  op_priority = {0,0,1,1,1};
-char op_char[] = "+-/*()";
-
-char 
-
-leaf* tree_head = (leaf*)malloc(sizeof(leaf));
-tree_head->op = bracket;
-tree_head->pleft  = NULL;
-tree_head->pright = NULL;
-
-
-void parse_expression(char* str,leaf* tree_head)
-{
-	
-}
-*/
 
