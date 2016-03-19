@@ -62,12 +62,14 @@ void copy_buff(buffer* source,buffer* target,int st,int end);
 void resize_buff(buffer* r,size_t n);
 int  add_to_buff(buffer* r, char* s);
 void init_buff(buffer* r,size_t n);
+void normalize_buff(buffer* r);
 void delete_buff(buffer* r);
 
 int in_str(char c,char* str);
 
 int assert_expr(buffer* r);
 int build_lex_tree(buffer* r);
+int is_unary_op(buffer* r, int i);
 
 void init_stack(stack* s);
 void push(stack *s,int x);
@@ -104,8 +106,8 @@ int main(void)
 
 int build_tree(buffer* r,node* parent)
 {
-	int  op_priority[] = {0,0,0,1,1};
-	char* op  = "~+-*/";
+	int  op_priority[] = {1,0,0,1,1};
+	char* op  = "~+-/*";
 	operation mnop;
 
 	int s = 0;
@@ -120,6 +122,7 @@ int build_tree(buffer* r,node* parent)
 	int minlevel = MINLEVEL;
 
 	/* The goal is to find min priority term on current level and put is as node of the tree */
+
 	for(i = 0; i < r->pos;i++)
 	{
 		if(r->buf[i] == '(') s += 1;
@@ -130,10 +133,6 @@ int build_tree(buffer* r,node* parent)
 		if(maxlevel < s) maxlevel = s;
 		if(minlevel > s) minlevel = s;
 	}
-	printf("expr: %s\n",r->buf);
-	printf("minlevel: %d\n",minlevel);
-	printf("maxlevel: %d\n",maxlevel);
-
 	level = minlevel;
 	
 	/*TODO Initialize variable that are reused by the cycle*/
@@ -186,7 +185,7 @@ void print_tree(node* parent,int level)
 	printf("operation: %d\n",(int)parent->op);
 	printf("buff: %s\n\n",parent->expr->buf);
 	if(parent->pleft != NULL)  {print_tree(parent->pleft,level+1);}
-	if(parent->pright != NULL) {print_tree(parent->pleft,level+1);}
+	if(parent->pright != NULL) {print_tree(parent->pright,level+1);}
 
 	return;
 }
@@ -195,6 +194,26 @@ int eval_tree(node* parent,vlong* res)
 {
 	
 	return 0;
+}
+
+int is_unary_op(buffer* r, int i)
+{
+	char* allowed_l = "+*/()1234567890";
+	char* allowed_r = "(1234567890";
+	int r_expr=0,l_expr=0;
+
+	if(r->buf[i] != '-' )return 0;
+	if(i < 0 || i >= r->pos-1)return -1;
+
+	if(i == 0)return 1;
+	l_expr = in_str(r->buf[i-1],allowed_l);
+	r_expr = in_str(r->buf[i+1],allowed_r);
+
+	if(l_expr < 0  || r_expr < 0)return -1;
+	if(l_expr >= 4 || r_expr == 0)return 0; //here is the heck
+	if(l_expr >= 0 && l_expr <= 3)return 1;
+
+	return 0;	
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -513,6 +532,32 @@ int add_to_buff(buffer* r, char* s)
 	return count;	
 }
 
+void normalize_buff(buffer* r) /*Change all unary minuses to (-1)* */
+{
+	int i = 0,temp = 0;
+	char* op  = "~+-/*";
+	char* minus_unary = "(-1)*";
+	buffer* tmp = (buffer*)malloc(sizeof(buffer));
+	init_buff(tmp,r->pos + 1);
+	
+	for(i = 0;i < r->pos;i++)
+	{
+		if(r->buf[i] == '-')
+		{
+			if(is_unary_op(r,i)){ add_to_buff(tmp,minus_unary); }			
+			else { tmp->buf[tmp->pos++] = r->buf[i]; }
+		}
+		else{
+			tmp->buf[tmp->pos++] = r->buf[i];
+		}
+	}
+	copy_buff(tmp,r,0,tmp->pos);
+	delete_buff(tmp);
+	free(tmp);
+
+	return;
+}
+
 void copy_buff(buffer* source,buffer* target,int st,int end)
 {
 	int size = end - st;
@@ -607,7 +652,7 @@ int delete_tree(node* parent)
 
 /* ------------------------------------------------------------------------------------------ */
 /* -------------------------------------Check expressions------------------------------------ */
-int in_str(char c,char* str)
+int 	in_str(char c,char* str)
 {
 	size_t length = strlen(str);
 	int i = 0;
@@ -925,6 +970,20 @@ int copy_buff_test()
 	free(b2);
 }
 
+int normalize_buff_test()
+{
+	size_t test_num = 0;
+	buffer *b1 = (buffer*)malloc(sizeof(buffer));
+	init_buff(b1,128);
+	log("Test %zu",test_num++);
+		add_to_buff(b1,"(-128+392)*2-10/-5");
+		normalize_buff(b1);
+	if(strcmp(b1->buf,"((-1)*128+392)*2-10/(-1)*5") != 0)printf("...FAIL\n");
+	else printf("...SUCCESS\n");
+	
+	return 0;
+}
+
 
 
 int expr_test()
@@ -958,7 +1017,7 @@ int expr_test()
 
 int build_tree_test()
 {
-	char *expr = "(1+3)*2 + 1";
+	char *expr = "(16178341900 + -3)*266 + 1 / 4";
 	node* parent = new_node(NULL);
 
 	add_to_buff(parent->expr,expr);
@@ -982,6 +1041,7 @@ int make_tests()
 	buff_test();
 	expr_test();
 	copy_buff_test();
+	normalize_buff_test();
 	return 0;	
 }
 /* ------------------------------------------------------------------------------------------ */
