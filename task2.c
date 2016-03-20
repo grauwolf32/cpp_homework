@@ -45,9 +45,12 @@ void sub(vlong *op1,vlong *op2,vlong *res);
 void mul(vlong *op1, int sh,int offs, vlong *res);
 void mul_long(vlong *op1, vlong *op2, vlong *res);
 void div_short(vlong *op1,int sh, vlong *res);
+int  bin_search(vlong* op1,vlong* op2,vlong* tmp);
+int  vl_to_int(vlong* r) {return r->val[MAXLEN];}
 
 vlong ltovlong(long long a);
 
+void shr(vlong* op,int n);
 int  cpy(vlong* src,vlong* ind);
 int  geq(vlong* op1,vlong* op2);
 int  leq(vlong* op1,vlong* op2);
@@ -71,7 +74,7 @@ void delete_buff(buffer* r);
 int in_str(char c,char* str);
 
 int assert_expr(buffer* r);
-int build_lex_tree(buffer* r);
+int build_tree(buffer* r,node* parent);
 int is_unary_op(buffer* r, int i);
 
 void init_stack(stack* s);
@@ -101,7 +104,25 @@ int expr_test();
 int main(void)
 {
 	//make_tests();
-	build_tree_test();
+	//build_tree_test();
+	buffer* expr = (buffer*)malloc(sizeof(buffer));
+	node* parent = new_node(NULL);
+	vlong res; res.st = MAXLEN;res.val[MAXLEN] = 0;
+
+	init_buff(expr,MAXLEN);
+	char tmp_str[MAXLEN];
+
+	while(scanf("%s",tmp_str) != -1)
+		add_to_buff(expr,tmp_str);
+	
+	if(assert_expr(expr) != 0){printf("[error]");return 0;}
+	normalize_buff(expr);
+	
+	parent->expr = expr;
+	if(build_tree(parent->expr,parent) != 0){printf("[error]");return 0;}
+	if(eval_tree(parent,&res) != 0) {printf("[error]");return 0;}
+	print_vlong(&res);
+	
 	return 0;
 }
 
@@ -208,7 +229,6 @@ int eval_tree(node* parent,vlong* res)
 {
 	if(is_leaf(parent))
 	{
-		printf("LEAF!!\n");
 		filter_buff(parent->expr,"()"); 
 		if(check_buff(parent->expr,"@1234567890") != 1)return -1; 
 		if(buff_to_vlong(parent->expr,res) != 1) return -1; 
@@ -223,53 +243,59 @@ int eval_tree(node* parent,vlong* res)
 
 	if(eval_tree(parent->pleft, &op1) != 0)return -1;
 	if(eval_tree(parent->pright,&op2) != 0)return -1;
+	/*
 	printf("op1 : ");
 	print_vlong(&op1);
 	printf("\n");
 	printf("op2 : ");
 	print_vlong(&op2);
 	printf("\n--------------------\n");
+	*/
 	
 	if(parent->op == none)return -1;
+	/*
 	printf("Choose op\n");
 	printf("Parent op : %d\n",parent->op);
+	*/
 
 	switch(parent->op)
 	{
 		case plus:
 		{
-			printf("plus\n");
+			//printf("plus\n");
 			add(&op1,&op2,res);
 			break;
 		}
 		case minus:
 		{
-			printf("minus\n");
+			//printf("minus\n");
 			sub(&op1,&op2,res);
 			break;
 		}
 		case divide:
 		{
-			printf("div\n");
-			div_short(&op1,1,res); //TODO Fix this
+			//printf("div\n");
+			div_short(&op1,vl_to_int(&op2),res); //TODO Fix this
 			break;
 		}
 		case multiplex:
 		{
-			printf("mul\n");
+			//printf("mul\n");
 			mul_long(&op1,&op2,res);
 			break;
 		}
 
 		default:
 		{
-			printf("default\n");
 			return -1;
 		}
 	}
+	/*
 	printf("res : ");
 	print_vlong(res);
 	printf("\n--------------------\n");
+	*/
+
 	return 0;
 }
 
@@ -301,7 +327,7 @@ void print_vlong(vlong *c)
 	int i;
 	printf("%d",c->val[c->st]);
 	for(i = c->st + 1; i <= MAXLEN;i++)
-		printf("%.4d",c->val[i]);
+		printf("%.4d",(int)(fabs(c->val[i])));
 }
 
 int  cpy(vlong* src,vlong* ind)
@@ -527,17 +553,15 @@ void div_short(vlong *op1,int sh, vlong *res)
 {
 	int i = MAXLEN;
 	int st = op1->st;
+
 	int rem = 0;
 	long long a = 0;
 	long long temp = 0;
 	long long flag = 0;
 
-	vlong res_tmp,a_long;
-	res_tmp.val[MAXLEN] = 0;
-	res_tmp.st = 0;
-
-	res->val[MAXLEN] = 0;
-	res->st = MAXLEN;
+	vlong res_tmp; res_tmp.val[MAXLEN] = 0; res_tmp.st = MAXLEN;
+	vlong a_long; a_long.val[MAXLEN] = 0; a_long.st = MAXLEN;
+	res->val[MAXLEN] = 0; res->st = MAXLEN;
 
 	for(i=st; i <= MAXLEN;i++)
 	{
@@ -554,6 +578,95 @@ void div_short(vlong *op1,int sh, vlong *res)
 		flag = rem * SYS;
 	}
 }
+
+void div_long(vlong *op1,vlong *op2,vlong *res)
+{
+	int i, flag = 0;
+	int st = op1->st;
+	int offs = op1->st - op2->st;
+	int k = 0;
+
+	if(op2->st < op1->st){reads_vlong(res,"0");return;}
+	for(i=MAXLEN-offs+1; i <= MAXLEN;i++)
+		res->val[i] = 0;
+	
+	vlong temp_a; temp_a.st = MAXLEN; temp_a.val[MAXLEN] = 0;
+	vlong temp_res; temp_res.st = MAXLEN; temp_res.val[MAXLEN] = 0;
+	vlong temp; temp.st = MAXLEN;temp.val[MAXLEN] = 0;
+	vlong rem; rem.st = MAXLEN; rem.val[MAXLEN] = 0;
+	vlong long_k; long_k.st = MAXLEN; long_k.val[MAXLEN] = 0;
+	
+	for(i = MAXLEN-offs;i >= st;i--)
+		temp.val[i+offs] = op1->val[i];
+
+	temp.st = st + offs;
+	st = st + offs;
+
+	while(st <= MAXLEN)
+	{
+		k = bin_search(&temp,op2,&temp_a);
+		long_k = ltovlong((long long)k);
+
+		add(res,&long_k,res);
+
+		cpy(res,&temp_res);
+		mul(&temp_res,SYS,0,res);
+		
+		sub(&temp,&temp_a,&rem);
+	
+		shr(&rem,1);
+		rem.val[MAXLEN] = op1->val[++st];
+		cpy(&rem,&temp);
+	}
+	
+	return;
+}
+
+void shr(vlong* op,int n)
+{
+	int i = 0;
+	for(i = op->st;i <= MAXLEN;i++)
+		op->val[i-n] = op->val[i];
+
+	for(i = MAXLEN; i >= MAXLEN - n;i--)
+		op->val[i] = 0;
+
+	op->st -= n;
+	return;
+}
+
+
+int bin_search(vlong* op1,vlong* op2,vlong* tmp)
+{
+	if(grt(op2,op1)){tmp->val[MAXLEN] = 0;tmp->st = 0;return 0;} // TODO Add support of the negative numbers
+
+	int k = 0,i = 0;
+
+	int left = 0;
+	int right = SYS;
+	int a = (left + right)/2;
+	
+	while(left < right)
+	{
+		mul(op2,a,0,tmp);
+
+		if(les(tmp,op1)) left = a + 1;
+		else right = a;
+
+		a = (left + right)/2;
+	}
+
+	mul(op2,a,0,tmp);
+
+	if(grt(tmp,op1))
+	{
+		a = a - 1;
+		mul(op2,a,0,tmp);
+	}
+	
+	return a;
+}
+
 
 
 /* ------------------------------------------------------------------------------------------ */
@@ -1257,11 +1370,11 @@ int build_tree_test()
 	node* parent = new_node(NULL);
 
 	add_to_buff(parent->expr,expr);
-	printf("pos: %d\n",parent->expr->pos);
+	printf("pos: %zu\n",parent->expr->pos);
 	printf("Is valid: %d\n",assert_expr(parent->expr));
-	printf("pos after assert: %d\n",parent->expr->pos);
+	printf("pos after assert: %zu\n",parent->expr->pos);
 	normalize_buff(parent->expr);
-	printf("pos after normalize: %d\n",parent->expr->pos);
+	printf("pos after normalize: %zu\n",parent->expr->pos);
 	log("Test %zu",test_num++);
 
 	build_tree(parent->expr,parent);
