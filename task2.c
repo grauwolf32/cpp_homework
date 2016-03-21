@@ -88,46 +88,63 @@ int eval_tree(node* parent,vlong* res);
 void print_tree(node* parent,int level);
 int buff_to_vlong(buffer* r,vlong* res);
 
-int make_tests();
-int equ_vlong_test();
-int add_vlong_test();
-int sub_vlong_test();
-int mul_vlong_test();
-int div_vlong_test();
-int build_tree_test();
+void print_tree(node* parent,int level)
+{
+	printf("level: %d\n",level);
+	printf("operation: %d\n",(int)parent->op);
+	printf("buff: %s\n\n",parent->expr->buf);
+	if(parent->pleft != NULL)  {print_tree(parent->pleft,level+1);}
+	if(parent->pright != NULL) {print_tree(parent->pright,level+1);}
 
-int filter_buff_test();
-int buff_test();
-int expr_test();
+	return;
+}
+
+int eval_expr_test()
+{
+	node* parent = new_node(NULL);
+	vlong res; res.st = MAXLEN;res.val[MAXLEN] = 0;
+
+	char* str  = "--";
+	add_to_buff(parent->expr,str);
+
+	if(assert_expr(parent->expr) != 0){printf("[error]");goto end;}
+	normalize_buff(parent->expr);
+	if(parent->expr->pos <= 0){printf("[error]");goto end;}
+	
+	if(build_tree(parent->expr,parent) != 0){printf("[error]");goto end;}
+	if(eval_tree(parent,&res) != 0) {printf("[error]");goto end;}
+
+	print_vlong(&res);
+	end:
+	delete_tree(parent);
+	return 0;
+}
+
 
 
 int main(void)
 {
-	//make_tests();
-	//build_tree_test();
-	buffer* expr = (buffer*)malloc(sizeof(buffer));
 	node* parent = new_node(NULL);
 	vlong res; res.st = MAXLEN;res.val[MAXLEN] = 0;
-
-	init_buff(expr,MAXLEN);
+	
 	char tmp_str[MAXLEN];
-
 	while(scanf("%s",tmp_str) != -1)
-		add_to_buff(expr,tmp_str);
+		add_to_buff(parent->expr,tmp_str);
+
+	if(assert_expr(parent->expr) != 0){printf("[error]");goto end;}
+	normalize_buff(parent->expr);
+	if(parent->expr->pos <= 0){printf("[error]");goto end;}
 	
-	if(assert_expr(expr) != 0){printf("[error]");return 0;}
-	normalize_buff(expr);
-	
-	parent->expr = expr;
-	if(build_tree(parent->expr,parent) != 0){printf("[error]");return 0;}
-	if(eval_tree(parent,&res) != 0) {printf("[error]");return 0;}
+	if(build_tree(parent->expr,parent) != 0){printf("[error]");goto end;}
+	if(eval_tree(parent,&res) != 0) {printf("[error]");goto end;}
+
 	print_vlong(&res);
+	end:
+	delete_tree(parent);
+	
 	
 	return 0;
 }
-
-/* ------------------------------------------------------------------------------------------ */
-/* -------------------------------------------Parser----------------------------------------- */
 
 int build_tree(buffer* r,node* parent)
 {
@@ -146,27 +163,21 @@ int build_tree(buffer* r,node* parent)
 	int maxlevel = 0;
 	int minlevel = MINLEVEL;
 
-	/* The goal is to find min priority term on current level and put is as node of the tree */
-
 	for(i = 0; i < r->pos;i++)
 	{
 		if(r->buf[i] == '(') {s += 1;continue;}
 		if(r->buf[i] == ')') {s -= 1;continue;}
-		
-		//printf("s: %d\n",s);
 
 		if(maxlevel < s) maxlevel = s;
 		if(minlevel > s) minlevel = s;
 	}
 	level = minlevel;
-	
-	/*TODO Initialize variable that are reused by the cycle*/
+
 	mnop = none;
 	mnop_ptr = 0;
 	temp = 0;
-	s = 0; /*Clear the stack TODO Use counter instead of stack*/
+	s = 0;
 
-	/* Find the maxlevel of brackets*/
 	for(i = 0; i < r->pos;i++)
 	{
 		if(r->buf[i] == '('){s += 1;continue;}
@@ -204,29 +215,22 @@ int build_tree(buffer* r,node* parent)
 	return 0;
 	
 }
-void print_tree(node* parent,int level)
-{
-	printf("level: %d\n",level);
-	printf("operation: %d\n",(int)parent->op);
-	printf("buff: %s\n\n",parent->expr->buf);
-	if(parent->pleft != NULL)  {print_tree(parent->pleft,level+1);}
-	if(parent->pright != NULL) {print_tree(parent->pright,level+1);}
-
-	return;
-}
 
 int is_leaf(node* leaf)   
 {
 	if(leaf == NULL)return -1;
 	if(leaf->pleft == NULL &&  leaf->pright == NULL)
 	{
-		if(leaf->parent != NULL)return 1;
+		return 1;
 	}
 	return 0;
 }
 
 int eval_tree(node* parent,vlong* res)
 {
+	if(parent->expr->pos == 0)
+		return -1;
+
 	if(is_leaf(parent))
 	{
 		filter_buff(parent->expr,"()"); 
@@ -243,44 +247,28 @@ int eval_tree(node* parent,vlong* res)
 
 	if(eval_tree(parent->pleft, &op1) != 0)return -1;
 	if(eval_tree(parent->pright,&op2) != 0)return -1;
-	/*
-	printf("op1 : ");
-	print_vlong(&op1);
-	printf("\n");
-	printf("op2 : ");
-	print_vlong(&op2);
-	printf("\n--------------------\n");
-	*/
 	
 	if(parent->op == none)return -1;
-	/*
-	printf("Choose op\n");
-	printf("Parent op : %d\n",parent->op);
-	*/
 
 	switch(parent->op)
 	{
 		case plus:
 		{
-			//printf("plus\n");
 			add(&op1,&op2,res);
 			break;
 		}
 		case minus:
 		{
-			//printf("minus\n");
 			sub(&op1,&op2,res);
 			break;
 		}
 		case divide:
 		{
-			//printf("div\n");
 			div_short(&op1,vl_to_int(&op2),res); //TODO Fix this
 			break;
 		}
 		case multiplex:
 		{
-			//printf("mul\n");
 			mul_long(&op1,&op2,res);
 			break;
 		}
@@ -290,12 +278,6 @@ int eval_tree(node* parent,vlong* res)
 			return -1;
 		}
 	}
-	/*
-	printf("res : ");
-	print_vlong(res);
-	printf("\n--------------------\n");
-	*/
-
 	return 0;
 }
 
@@ -313,14 +295,11 @@ int is_unary_op(buffer* r, int i)
 	r_expr = in_str(r->buf[i+1],allowed_r);
 
 	if(l_expr < 0  || r_expr < 0)return -1;
-	if(l_expr >= 4 || r_expr == 0)return 0; //here is the heck
+	if(l_expr >= 4 || r_expr == 0)return 0; 
 	if(l_expr >= 0 && l_expr <= 3)return 1;
 
 	return 0;	
 }
-
-/* ------------------------------------------------------------------------------------------ */
-/* ---------------------------------------Long Arithmetics---------------------------------- */
 
 void print_vlong(vlong *c)
 {
@@ -371,7 +350,6 @@ int reads_vlong(vlong *c, char* str)
 	int   is_negative = 0;
 	char  r_val[LOGSYS+1];
 	char* str_pos;
-	char  tmp = '\0';
 
 	if(str[0] == '-')
 	{
@@ -546,9 +524,6 @@ int  grt(vlong* op1,vlong* op2)
 	return 1 - leq(op1,op2);
 }
 
-
-/* TODO Make the shit below works well */
-
 void div_short(vlong *op1,int sh, vlong *res)
 {
 	int i = MAXLEN;
@@ -569,7 +544,7 @@ void div_short(vlong *op1,int sh, vlong *res)
 		mul(&res_tmp,SYS,0,res);
 
 		temp = op1->val[i] + flag;
-		a   = (long long) temp / sh; // Here is the heck!
+		a   = (long long) temp / sh;
 		rem = (long long) temp % sh;
 
 		a_long = ltovlong(a);
@@ -579,104 +554,11 @@ void div_short(vlong *op1,int sh, vlong *res)
 	}
 }
 
-void div_long(vlong *op1,vlong *op2,vlong *res)
-{
-	int i, flag = 0;
-	int st = op1->st;
-	int offs = op1->st - op2->st;
-	int k = 0;
-
-	if(op2->st < op1->st){reads_vlong(res,"0");return;}
-	for(i=MAXLEN-offs+1; i <= MAXLEN;i++)
-		res->val[i] = 0;
-	
-	vlong temp_a; temp_a.st = MAXLEN; temp_a.val[MAXLEN] = 0;
-	vlong temp_res; temp_res.st = MAXLEN; temp_res.val[MAXLEN] = 0;
-	vlong temp; temp.st = MAXLEN;temp.val[MAXLEN] = 0;
-	vlong rem; rem.st = MAXLEN; rem.val[MAXLEN] = 0;
-	vlong long_k; long_k.st = MAXLEN; long_k.val[MAXLEN] = 0;
-	
-	for(i = MAXLEN-offs;i >= st;i--)
-		temp.val[i+offs] = op1->val[i];
-
-	temp.st = st + offs;
-	st = st + offs;
-
-	while(st <= MAXLEN)
-	{
-		k = bin_search(&temp,op2,&temp_a);
-		long_k = ltovlong((long long)k);
-
-		add(res,&long_k,res);
-
-		cpy(res,&temp_res);
-		mul(&temp_res,SYS,0,res);
-		
-		sub(&temp,&temp_a,&rem);
-	
-		shr(&rem,1);
-		rem.val[MAXLEN] = op1->val[++st];
-		cpy(&rem,&temp);
-	}
-	
-	return;
-}
-
-void shr(vlong* op,int n)
-{
-	int i = 0;
-	for(i = op->st;i <= MAXLEN;i++)
-		op->val[i-n] = op->val[i];
-
-	for(i = MAXLEN; i >= MAXLEN - n;i--)
-		op->val[i] = 0;
-
-	op->st -= n;
-	return;
-}
-
-
-int bin_search(vlong* op1,vlong* op2,vlong* tmp)
-{
-	if(grt(op2,op1)){tmp->val[MAXLEN] = 0;tmp->st = 0;return 0;} // TODO Add support of the negative numbers
-
-	int k = 0,i = 0;
-
-	int left = 0;
-	int right = SYS;
-	int a = (left + right)/2;
-	
-	while(left < right)
-	{
-		mul(op2,a,0,tmp);
-
-		if(les(tmp,op1)) left = a + 1;
-		else right = a;
-
-		a = (left + right)/2;
-	}
-
-	mul(op2,a,0,tmp);
-
-	if(grt(tmp,op1))
-	{
-		a = a - 1;
-		mul(op2,a,0,tmp);
-	}
-	
-	return a;
-}
-
-
-
-/* ------------------------------------------------------------------------------------------ */
-
-/*------------------------------------------Buffer--------------------------------------------*/
 void resize_buff(buffer* r,size_t n)
 {
 	r->buf = (char*)realloc(r->buf,n*sizeof(char));
 	memset((r->buf+r->pos),'\0',n - r->pos);
-	r->pos = r->pos > n ? n : r->pos; /*TODO Make sure about this expr*/
+	r->pos = r->pos > n ? n : r->pos;
 	r->size = n;
 }
 void init_buff(buffer* r,size_t n)
@@ -722,10 +604,9 @@ int add_to_buff(buffer* r, char* s)
 	return count;	
 }
 
-void normalize_buff(buffer* r) /*Change all unary minuses to @ */
+void normalize_buff(buffer* r)
 {
-	int i = 0,temp = 0;
-	char* op  = "~+-/*";
+	int i = 0;
 	char* minus_unary = "@";
 	buffer* tmp = (buffer*)malloc(sizeof(buffer));
 	init_buff(tmp,r->pos + 1);
@@ -750,7 +631,7 @@ void normalize_buff(buffer* r) /*Change all unary minuses to @ */
 
 void filter_buff(buffer* r, char* filter)
 {	
-	int i = 0,temp = 0;
+	int i = 0;
 	buffer* tmp = (buffer*)malloc(sizeof(buffer));
 	init_buff(tmp,r->pos + 1);
 	for(i = 0;i < r->pos;i++)
@@ -778,13 +659,12 @@ int check_buff(buffer* r, char* template)
 
 int buff_to_vlong(buffer* r,vlong* res)
 {
-	int i = 0,temp = 0;
 	res->val[MAXLEN] = 0;
 	res->st = 0;
 
 	if(check_buff(r,"@1234567890") != 1)return 0;
 	if(r->buf[0] == '@')r->buf[0] = '-';
-
+	if(check_buff(r,"-1234567890") != 1)return 0;
 	reads_vlong(res,r->buf);
 
 	return 1;
@@ -801,14 +681,12 @@ void copy_buff(buffer* source,buffer* target,int st,int end)
 	if(target->size < size)
 		resize_buff(target,size+1);
 
-	for(i = 0;i <= size;i++) /*Less or Leq*/
+	for(i = 0;i <= size;i++)
 		target->buf[i] = source->buf[st+i];
 	
 	target->pos = size+1;
 }
 
-/* ------------------------------------------------------------------------------------------ */
-/* ------------------------------------------Stack------------------------------------------- */
 
 void push(stack *s,int x)
 {
@@ -825,8 +703,6 @@ void init_stack(stack* s)
 	memset(s->val,0,sizeof(int)*MAXLEN);
 	s->sp = 0;
 }
-/* ------------------------------------------------------------------------------------------ */
-/* ------------------------------------------Node-------------------------------------------- */
 
 node* new_node(node* parent)
 {
@@ -845,7 +721,7 @@ node* new_node(node* parent)
 int  delete_node(node* r)
 {
 	int status = 0;
-	if(r == NULL) return status;	
+	if(r == NULL) {printf("Hmm...");return status;}
 
 	if(r->pright != NULL) status += 1;
 	if(r->pleft != NULL) status += 2;
@@ -860,9 +736,10 @@ int  delete_node(node* r)
 		if(r == r->parent->pleft)
 			r->parent->pleft = (node*)NULL;
 		else if(r == r->parent->pright)
-			r->parent->pright = NULL;
+			r->parent->pright = (node*)NULL;
 		else status += 4;
 	}    
+	
 	free(r);
 	r = NULL;
 
@@ -878,12 +755,10 @@ int delete_tree(node* parent)
 		status += delete_tree(parent->pright);
 
 	status += delete_node(parent);
+
 	return status;
 }
 
-
-/* ------------------------------------------------------------------------------------------ */
-/* -------------------------------------Check expressions------------------------------------ */
 int 	in_str(char c,char* str)
 {
 	size_t length = strlen(str);
@@ -924,496 +799,4 @@ int assert_expr(buffer* r)
 	return 0;
 }
 
-/* ------------------------------------------------------------------------------------------ */
-/* ------------------------------------------Tests------------------------------------------- */
-
-int equ_vlong_test()
-{
-	vlong a,b,c,e;
-	size_t test_num = 0;
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"0");
-		reads_vlong(&b,"0");
-	if(!equ(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111111111");
-		reads_vlong(&b,"111111111111111");
-	if(!equ(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111111111");
-		reads_vlong(&b,"111111111111111");
-	if(!geq(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111111111");
-		reads_vlong(&b,"111111111111111");
-	if(!leq(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++); /*FAIL*/
-		reads_vlong(&a,"0");
-		reads_vlong(&b,"111111111111111");
-	if(!leq(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&b,"-1");
-		reads_vlong(&a,"111111111111111");
-	if(!geq(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"0");
-		reads_vlong(&b,"1111");
-	if(!les(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	
-	log("Test %zu",test_num++); /*FAIL*/
-		reads_vlong(&a,"100000");
-		reads_vlong(&b,"1111");
-	if(!grt(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	return 0;
-}
-int add_vlong_test()
-{
-	vlong a,b,c,e;
-	size_t test_num = 0;
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111111111");
-		reads_vlong(&b,"111111111111111");
-		reads_vlong(&e,"222222222222222");
-		add(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"0");
-		reads_vlong(&b,"111111111111111");
-		reads_vlong(&e,"111111111111111");
-		add(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111111111");
-		reads_vlong(&b,"-111111111111111");
-		reads_vlong(&e,"0");
-		add(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	return 0;
-}
-int sub_vlong_test()
-{
-	vlong a,b,c,e;
-	size_t test_num = 0;
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111111111");
-		reads_vlong(&b,"111111111111111");
-		reads_vlong(&e,"0");
-		sub(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"1");
-		reads_vlong(&b,"11");
-		reads_vlong(&e,"-10");
-		sub(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111111111");
-		reads_vlong(&b,"-111111111111111");
-		reads_vlong(&e,"222222222222222");
-		sub(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	return 0;
-}
-
-int mul_vlong_test()
-{
-	vlong a,b,c,e;
-	size_t test_num = 0;
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"1");
-		reads_vlong(&b,"0");
-		reads_vlong(&e,"0");
-		mul_long(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"-111111111");
-		reads_vlong(&e, "111111111");
-		mul(&a,-1,0,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"1");
-		reads_vlong(&e,"0");
-		mul(&a,0,0,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"37");
-		reads_vlong(&b,"3");
-		reads_vlong(&e,"111");
-		mul_long(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"-111111111111111");
-		reads_vlong(&b,"-1");
-		reads_vlong(&e,"111111111111111");
-		mul_long(&a,&b,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");	
-
-	return 0;
-}
-int div_short_test()
-{
-	vlong a,b,c,e;
-	size_t test_num = 0;
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"1");
-		reads_vlong(&e,"1");
-		div_short(&a,1,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111");
-		reads_vlong(&e,"37");
-		div_short(&a,3,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111");
-		reads_vlong(&e,"3003003");
-		div_short(&a,37,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"111111111");
-		reads_vlong(&e,"-3003003");
-		div_short(&a,-37,&c);
-	if(!equ(&e,&c))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	
-	return 0;
-}
-void ltovlong_test()
-{
-	vlong a,b,c,e;
-	long long   r;
-	size_t test_num = 0;
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"999999999999");
-		b = ltovlong(999999999999);
-	if(!equ(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"-99999999");
-		b = ltovlong(-99999999);
-	if(!equ(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-}
-
-int cpy_vlong_test()
-{
-	vlong a,b,c,e;
-	size_t test_num = 0;
-
-	log("Test %zu",test_num++);
-		reads_vlong(&a,"1234567890098765457635428635");
-		reads_vlong(&b,"13124234535625452435234525245234523542");
-		cpy(&a,&b);
-	if(!equ(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	
-	return 0;
-}
-
-int buff_test()
-{
-	size_t test_num = 0;
-	char* test = "      123456         + \n \n 11111111 \n-\n193/ 2\n";
-	char* res  = "123456+11111111-193/2";
-
-	log("Test %zu",test_num++);
-		buffer r;
-		init_buff(&r,2);
-        	add_to_buff(&r, test);
-	if(strcmp(r.buf,res) != 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	delete_buff(&r);
-}
-
-int copy_buff_test()
-{
-	size_t test_num = 0;
-	buffer *b1,*b2;
-
-	b1 = (buffer*)malloc(sizeof(buffer));
-	b2 = (buffer*)malloc(sizeof(buffer));
-
-	init_buff(b1,2);
-	init_buff(b2,2);
-
-	log("Test %zu",test_num++);
-		add_to_buff(b1,"(1+3)*2+1");
-		copy_buff(b1,b2,0,7-1);	
-	if(strcmp(b2->buf,"(1+3)*2") != 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	clear_buff(b1);
-	log("Test %zu",test_num++);
-		add_to_buff(b1,"(1+3)*2+1");
-		copy_buff(b1,b2,7+1,9);	
-	if(strcmp(b2->buf,"1") != 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	delete_buff(b1);
-	delete_buff(b2);
-	
-	free(b1);
-	free(b2);
-}
-
-int normalize_buff_test()
-{
-	size_t test_num = 0;
-	buffer *b1 = (buffer*)malloc(sizeof(buffer));
-	init_buff(b1,128);
-	log("Test %zu",test_num++);
-		add_to_buff(b1,"(-128+392)*2-10/-5");
-		normalize_buff(b1);
-	if(strcmp(b1->buf,"(@128+392)*2-10/@5") != 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	delete_buff(b1);;
-	free(b1);
-
-	return 0;
-}
-int is_leaf_test()
-{
-	size_t test_num = 0;
-
-	node* p = new_node(NULL);
-	p->pleft = new_node(p);
-	p->pright = new_node(p);
-
-	log("Test %zu",test_num++);
-	if(is_leaf(p))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-	if(!is_leaf(p->pleft))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	log("Test %zu",test_num++);
-	if(!is_leaf(p->pright))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	delete_tree(p);
-
-	return 0;
-}
-
-
-int filter_buff_test() 
-{ 
-	size_t test_num = 0;
-	buffer *b1 = (buffer*)malloc(sizeof(buffer));
-	init_buff(b1,128);
-
-	log("Test %zu",test_num++);
-		add_to_buff(b1,"(@14721213");
-		filter_buff(b1,"()");
-	if(strcmp(b1->buf,"@14721213") != 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	clear_buff(b1);
-
-	log("Test %zu",test_num++);
-		add_to_buff(b1,"(23");
-		filter_buff(b1,"()");
-	if(strcmp(b1->buf,"23") != 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	delete_buff(b1);
-	free(b1);
-	
-	return 0;
-}
-
-int check_buff_test() 
-{
-	size_t test_num = 0;
-	buffer *b1 = (buffer*)malloc(sizeof(buffer));
-	init_buff(b1,128);
-
-	log("Test %zu",test_num++);
-		add_to_buff(b1,"@147223423987345273952741213");
-	if(check_buff(b1,"@1234567890") != 1)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	
-	clear_buff(b1);
-
-	log("Test %zu",test_num++);
-		add_to_buff(b1,"@1472234239873452+73952741213)()");
-	if(check_buff(b1,"@1234567890") != 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	
-	clear_buff(b1);
-
-	log("Test %zu",test_num++);
-		add_to_buff(b1,"@1472234239873452+73952741213");
-	if(check_buff(b1,"@1234567890") != 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	delete_buff(b1);
-	free(b1);
-	
-	return 0;
-}
-
-int buff_to_vlong_test()
-{
-	size_t test_num = 0;
-	vlong a,b;
-	char *vl1 = "@173749238542";
-	char *vl2 = "23";
-	buffer *b1 = (buffer*)malloc(sizeof(buffer));
-
-	init_buff(b1,128);
-	log("Test %zu",test_num++);
-		add_to_buff(b1,vl1);
-		buff_to_vlong(b1,&a);
-		reads_vlong(&b,"-173749238542");
-	if(!equ(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	clear_buff(b1);
-
-	a.val[MAXLEN] = 0;
-	a.st = MAXLEN;
-
-	log("Test %zu",test_num++);
-		add_to_buff(b1,vl2);
-		buff_to_vlong(b1,&a);
-		reads_vlong(&b,"23");
-	if(!equ(&a,&b))printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	delete_buff(b1);
-	free(b1);
-		
-	return 0;
-}
-
-int expr_test()
-{
-	size_t test_num = 0;
-	char* bad_expr_1 = " (1 +232482739482)*)12312";
-	char* bad_expr_2 = " (1 +232482739482)*123adajsd12";
-	char* good_expr_1  = "(101231 + 1231 213) + 21312\n1231";
-
-	buffer r;
-	init_buff(&r,64);
-
-	log("Test %zu",test_num++);
-		add_to_buff(&r,bad_expr_1);
-	if(assert_expr(&r) == 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	
-	clear_buff(&r);
-	log("Test %zu",test_num++);
-		add_to_buff(&r,bad_expr_2);
-	if(assert_expr(&r) == 0)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-
-	clear_buff(&r);
-	log("Test %zu",test_num++);
-		add_to_buff(&r,good_expr_1);
-	if(assert_expr(&r) == -1)printf("...FAIL\n");
-	else printf("...SUCCESS\n");
-	delete_buff(&r);
-}
-
-int build_tree_test()
-{
-	size_t test_num = 0;
-	
-	char *expr = "-5*((-7)) + (23+7)-10";
-	node* parent = new_node(NULL);
-
-	add_to_buff(parent->expr,expr);
-	printf("pos: %zu\n",parent->expr->pos);
-	printf("Is valid: %d\n",assert_expr(parent->expr));
-	printf("pos after assert: %zu\n",parent->expr->pos);
-	normalize_buff(parent->expr);
-	printf("pos after normalize: %zu\n",parent->expr->pos);
-	log("Test %zu",test_num++);
-
-	build_tree(parent->expr,parent);
-	print_tree(parent,0);
-
-	vlong res;
-	res.val[MAXLEN] = 0;
-	res.st = MAXLEN;
-	eval_tree(parent,&res);
-
-	printf("res: ");
-	print_vlong(&res);
-	printf("\n");
-
-	print_tree(parent,0);
-	delete_tree(parent);
-	return 0;
-}
-
-int make_tests()
-{
-	equ_vlong_test();
-	add_vlong_test();
-	sub_vlong_test();
-	mul_vlong_test();
-	div_short_test();
-	ltovlong_test();
-	cpy_vlong_test();
-	buff_test();
-	expr_test();
-	copy_buff_test();
-	normalize_buff_test();
-	filter_buff_test();
-
-	is_leaf_test();
-	check_buff_test();
-	buff_to_vlong_test();
-
-	return 0;	
-}
-/* ------------------------------------------------------------------------------------------ */
 
