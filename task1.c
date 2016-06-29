@@ -34,7 +34,7 @@ ullong read_number()
 		}
 		ptr++;	 
 	}
-	sscanf(str,"%Lu",&res);
+	sscanf(str,"%Lu",&res); //chek if zero;
 	if(res > LIMIT || res == 0){printf("[error]"); return -1;}
 	return res;
 }

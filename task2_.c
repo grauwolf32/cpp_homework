@@ -13,6 +13,14 @@
 #define log(s, ...) printf(s " (%s in %s:%d)", __VA_ARGS__, __func__, \
     __FILE__, __LINE__)
 
+#define ERROR {printf("[error]");delete_tree(parent);return 0;}
+
+#define YES 1
+#define NO  0
+
+#define FAIL  -1
+#define SUCC   0
+
 typedef struct{
 	int val[MAXLEN+1];
 	int st;
@@ -93,15 +101,29 @@ int main(void)
 	vlong res; res.st = MAXLEN;res.val[MAXLEN] = 0;
 	
 	char tmp_str[MAXLEN];
-	while(scanf("%s",tmp_str) != -1)
+	while(scanf("%s",tmp_str) != FAIL)
 		add_to_buff(parent->expr,tmp_str);
 
-	if(assert_expr(parent->expr) != 0){printf("[error]");delete_tree(parent);return 0;}
+	if(assert_expr(parent->expr) != SUCC)
+	{
+		 ERROR;
+	}
+
 	normalize_buff(parent->expr);
-	if(parent->expr->pos <= 0){printf("[error]");delete_tree(parent); return 0;}
+	if(parent->expr->pos <= 0)
+	{
+		ERROR;
+	}
 	
-	if(build_tree(parent->expr,parent) != 0){printf("[error]");delete_tree(parent);	return 0;}
-	if(eval_tree(parent,&res) != 0) {printf("[error]");delete_tree(parent); return 0;}
+	if(build_tree(parent->expr,parent) != SUCC)
+	{
+		ERROR;
+	}
+
+	if(eval_tree(parent,&res) != SUCC)
+	{
+		ERROR;
+	}
 
 	print_vlong(&res);
 	delete_tree(parent);	
@@ -127,15 +149,8 @@ int build_tree(buffer* r,node* parent)
 
 	for(i = 0; i < r->pos;i++)
 	{
-		if(r->buf[i] == '(') {
-			s += 1;
-			continue;
-		}
-
-		if(r->buf[i] == ')') {
-			s -= 1;
-			continue;
-		}
+		if(r->buf[i] == '(') s++;
+		if(r->buf[i] == ')') s--;
 
 		if(maxlevel < s) maxlevel = s;
 		if(minlevel > s) minlevel = s;
@@ -150,15 +165,8 @@ int build_tree(buffer* r,node* parent)
 
 	for(i = 0; i < r->pos;i++)
 	{
-		if(r->buf[i] == '('){
-			s += 1;
-			continue;
-		}
-
-		if(r->buf[i] == ')'){
-			s -= 1;
-			continue;
-		}
+		if(r->buf[i] == '(') s++;
+		if(r->buf[i] == ')') s--;
 	
 		if(level == s){
 			temp = in_str(r->buf[i],op);
@@ -174,10 +182,7 @@ int build_tree(buffer* r,node* parent)
 			
 	}
 	
-	if(mnop_ptr == 0)
-	{
-		return 0;
-	}
+	if(mnop_ptr == 0) return SUCC;
 		
 	parent->op = mnop;
 	parent->expr = r;
@@ -190,31 +195,31 @@ int build_tree(buffer* r,node* parent)
 	build_tree(parent->pleft->expr,parent->pleft);
 	build_tree(parent->pright->expr,parent->pright);
 
-	return 0;
+	return SUCC;
 	
 }
 
 int is_leaf(node* leaf)   
 {
-	if(leaf == NULL)return -1;
+	if(leaf == NULL)return FAIL;
 	if(leaf->pleft == NULL &&  leaf->pright == NULL)
 	{
-		return 1;
+		return YES;
 	}
-	return 0;
+	return NO;
 }
 
 int eval_tree(node* parent,vlong* res)
 {
 	if(parent->expr->pos == 0)
-		return -1;
+		return FAIL;
 
-	if(is_leaf(parent))
+	if(is_leaf(parent) == YES)
 	{
 		filter_buff(parent->expr,"()"); 
-		if(check_buff(parent->expr,"@1234567890") != 1)return -1; 
-		if(buff_to_vlong(parent->expr,res) != 1) return -1; 
-		return 0;
+		if(check_buff(parent->expr,"@1234567890") != SUCC)return FAIL; 
+		if(buff_to_vlong(parent->expr,res) != SUCC) return FAIL; 
+		return SUCC;
 	}
 	
 	vlong op1,op2;
@@ -223,10 +228,10 @@ int eval_tree(node* parent,vlong* res)
 	op1.st = MAXLEN;
 	op2.st = MAXLEN;
 
-	if(eval_tree(parent->pleft, &op1) != 0)return -1;
-	if(eval_tree(parent->pright,&op2) != 0)return -1;
+	if(eval_tree(parent->pleft, &op1) != SUCC)return FAIL;
+	if(eval_tree(parent->pright,&op2) != SUCC)return FAIL;
 	
-	if(parent->op == none)return -1;
+	if(parent->op == none)return FAIL;
 
 	switch(parent->op)
 	{
@@ -242,7 +247,7 @@ int eval_tree(node* parent,vlong* res)
 		}
 		case divide:
 		{
-			div_short(&op1,vl_to_int(&op2),res); //TODO Fix this
+			div_short(&op1,vl_to_int(&op2),res); 
 			break;
 		}
 		case multiplex:
@@ -253,10 +258,10 @@ int eval_tree(node* parent,vlong* res)
 
 		default:
 		{
-			return -1;
+			return FAIL;
 		}
 	}
-	return 0;
+	return SUCC;
 }
 
 int is_unary_op(buffer* r, int i)
@@ -265,18 +270,18 @@ int is_unary_op(buffer* r, int i)
 	char* allowed_r = "(1234567890";
 	int r_expr=0,l_expr=0;
 
-	if(r->buf[i] != '-' )return 0;
-	if(i < 0 || i >= r->pos-1)return -1;
+	if(r->buf[i] != '-' )return NO;
+	if(i < 0 || i >= r->pos-1)return FAIL;
 
-	if(i == 0)return 1;
+	if(i == 0)return YES;
 	l_expr = in_str(r->buf[i-1],allowed_l);
 	r_expr = in_str(r->buf[i+1],allowed_r);
 
-	if(l_expr < 0  || r_expr < 0)return -1;
-	if(l_expr >= 4 || r_expr == 0)return 0; 
-	if(l_expr >= 0 && l_expr <= 3)return 1;
+	if(l_expr < 0  || r_expr < 0)return FAIL;
+	if(l_expr >= 4 || r_expr == 0)return NO; 
+	if(l_expr >= 0 && l_expr <= 3)return YES;
 
-	return 0;	
+	return YES;	
 }
 
 void print_vlong(vlong *c)
@@ -295,7 +300,7 @@ int  cpy(vlong* src,vlong* ind)
 	for(i = MAXLEN;i >= st;i--)
 		ind->val[i] = src->val[i];
 
-	return 0;
+	return SUCC;
 }
 
 vlong ltovlong(long long a)
@@ -310,7 +315,7 @@ vlong ltovlong(long long a)
 		a = a / SYS;
 		n.st = n.st - 1;
 	}
-	n.st += 1;
+	n.st++;
 
 	return n;
 }
@@ -343,7 +348,7 @@ int reads_vlong(vlong *c, char* str)
 
 	while(i >= 0){
 		str_pos = (char*)(str + i*LOGSYS +rest);
-		if(sscanf(str_pos,"%4d",&temp) != 1){printf("[error]");return -1;} /*If LOGSYS changing, don't forget to change %4d */
+		if(sscanf(str_pos,"%4d",&temp) != 1){printf("[error]");return FAIL;} 
 		c->val[st--] = temp;
 		i--;
 	}
@@ -365,7 +370,7 @@ int reads_vlong(vlong *c, char* str)
 		for(i = c->st;i <= MAXLEN;i++)
 			c->val[i] *= -1;
 	}
-	return 0;
+	return SUCC;
 }
 
 void add(vlong *op1, vlong *op2, vlong *res)
@@ -393,7 +398,7 @@ void add(vlong *op1, vlong *op2, vlong *res)
 	res->st = st;
 	
 	while(res->val[res->st] == 0 && res->st < MAXLEN)
-		res->st += 1;
+		res->st++;
 }
 
 
@@ -415,7 +420,7 @@ void mul(vlong *op1, int sh,int offs, vlong *res)
 	res->st = st-offs;
 
 	while(res->val[res->st] == 0 && res->st < MAXLEN)
-		res->st += 1;
+		res->st++;
 }
 
 void mul_long(vlong *op1, vlong *op2, vlong *res)
@@ -431,24 +436,24 @@ void mul_long(vlong *op1, vlong *op2, vlong *res)
 	}
 
 	while(res->val[res->st] == 0 && res->st < MAXLEN)
-		res->st += 1;
+		res->st++;
 }
 
-	void sub(vlong *op1,vlong *op2,vlong *res)
+void sub(vlong *op1,vlong *op2,vlong *res)
 {
 	vlong temp;
 	mul(op2, -1, 0, &temp);
 	add(op1, &temp, res);
 
 	while(res->val[res->st] == 0 && res->st < MAXLEN)
-		res->st += 1;	
+		res->st++;	
 }
 
 int equ(vlong* op1, vlong* op2)
 {
 	if(op1->st != op2->st)
 	{
-		return 0;
+		return NO;
 	}
 
 	int st = op1->st;
@@ -457,16 +462,16 @@ int equ(vlong* op1, vlong* op2)
 	{
 		if(op1->val[i] != op2->val[i])
 		{
-			return 0;
+			return NO;
 		}
 	}
-	return 1;
+	return YES;
 }
 
 int  geq(vlong* op1,vlong* op2)
 {
-	if(op1->st < op2->st) return 1;
-	if(op1->st > op1->st) return 0;
+	if(op1->st < op2->st) return YES;
+	if(op1->st > op1->st) return NO;
 	
 	int st = op1->st;
 	int i = 0;
@@ -475,15 +480,15 @@ int  geq(vlong* op1,vlong* op2)
 	{
 		if(op1->val[i] < op2->val[i])
 		{
-			return 0; 
+			return NO; 
 		}
 	}
-	return 1;
+	return YES;
 }
 int  leq(vlong* op1,vlong* op2)
 {
-	if(op1->st < op2->st) return 0;
-	if(op1->st > op1->st) return 1;
+	if(op1->st < op2->st) return NO;
+	if(op1->st > op1->st) return YES;
 	
 	int st = op1->st;
 	int i = 0;
@@ -492,10 +497,10 @@ int  leq(vlong* op1,vlong* op2)
 	{
 		if(op1->val[i] > op2->val[i])
 		{
-			return 0;
+			return NO;
 		}
 	}
-	return 1;
+	return YES;
 }
 int  les(vlong* op1,vlong* op2)
 {
@@ -597,17 +602,23 @@ void normalize_buff(buffer* r)
 	{
 		if(r->buf[i] == '-')
 		{
-			if(is_unary_op(r,i)){ add_to_buff(tmp,minus_unary); }			
-			else { tmp->buf[tmp->pos++] = r->buf[i]; }
+			if(is_unary_op(r,i))
+			{
+				add_to_buff(tmp,minus_unary); 
+			}			
+			else 
+			{
+				tmp->buf[tmp->pos++] = r->buf[i]; 
+			}
 		}
-		else{
+		else
+		{
 			tmp->buf[tmp->pos++] = r->buf[i];
 		}
 	}
 	copy_buff(tmp,r,0,tmp->pos-1);
 	delete_buff(tmp);
 	free(tmp);
-
 	return;
 }
 
@@ -636,10 +647,10 @@ int check_buff(buffer* r, char* template)
 	int i = 0;
 	for(i = 0;i < r->pos;i++)
 	{
-		if(in_str(r->buf[i],template) < 0) return 0;
+		if(in_str(r->buf[i],template) < 0) return FAIL;
 	}
 
-	return 1;
+	return SUCC;
 }
 
 int buff_to_vlong(buffer* r,vlong* res)
@@ -647,9 +658,9 @@ int buff_to_vlong(buffer* r,vlong* res)
 	res->val[MAXLEN] = 0;
 	res->st = 0;
 
-	if(check_buff(r,"@1234567890") != 1)
+	if(check_buff(r,"@1234567890") != SUCC)
 	{
-		return 0;
+		return FAIL;
 	}
 
 	if(r->buf[0] == '@')
@@ -657,13 +668,13 @@ int buff_to_vlong(buffer* r,vlong* res)
 		r->buf[0] = '-';
 	}	
 	
-	if(check_buff(r,"-1234567890") != 1)
+	if(check_buff(r,"-1234567890") != SUCC)
 	{
-		return 0;
+		return FAIL;
 	}
 
 	reads_vlong(res,r->buf);
-	return 1;
+	return SUCC;
 }
 
 void copy_buff(buffer* source,buffer* target,int st,int end)
@@ -769,11 +780,14 @@ int 	in_str(char c,char* str)
 	int i = 0;
 	while(i < length)
 	{
-		if(str[i] == c)return i;
-		i += 1;
+		if(str[i] == c)
+		{
+			return i;
+		}
+		i++;
 	}
 
-	return -1;
+	return FAIL;
 }
 
 int assert_expr(buffer* r)
@@ -785,28 +799,29 @@ int assert_expr(buffer* r)
 	int i = 0;
 	for(i = 0;i < r->pos;i++)
 	{
-		if(in_str(r->buf[i], allowed_symbols) != -1)
+		if(in_str(r->buf[i], allowed_symbols) != FAIL)
 		{
+			if(r->buf[i] == ')')
+			{
+				if(s.sp > 0)
+				{
+					pop(&s);	
+				}
+				else return FAIL;
+			}
+
 			if(r->buf[i] == '(')
 			{ 
 				push(&s,1);
-				continue;
-			}
-
-			if(r->buf[i] == ')')
-			{
-				if(s.sp > 0){
-					pop(&s);	
-				}
-				else return -1;
 			}
 			
 		}
-		else return -1;
-	}
-	if(s.sp != 0) return -1;
 
-	return 0;
+		else return FAIL;
+	}
+	if(s.sp != 0) return FAIL;
+
+	return SUCC;
 }
 
 
